@@ -128,13 +128,14 @@ class DummyTxnManager extends HiveTxnManagerImpl {
       List<HiveLockObj> lockObj = null;
       if (output.getType() == WriteEntity.Type.DATABASE) {
         LOG.debug("Output has database:"+output.getDatabase());
-        if(! output.getDatabase().getName().toString().equalsIgnoreCase("default")){
-          lockObjects.addAll(getLockObjects(plan, output.getDatabase(), null,
-              null,
-              output.isComplete() ? HiveLockMode.EXCLUSIVE : HiveLockMode.SHARED));
-        }else{
-          LOG.debug("Removing unnecessary lock aquirement on "+output.getDatabase()+" database");
-        }
+        LOG.debug("Removing unnecessary output lock aquirement on "+output.getDatabase()+" database");
+        //if(! output.getDatabase().getName().toString().equalsIgnoreCase("default")){
+        //  lockObjects.addAll(getLockObjects(plan, output.getDatabase(), null,
+        //      null,
+        //      output.isComplete() ? HiveLockMode.EXCLUSIVE : HiveLockMode.SHARED));
+        //}else{
+        //  LOG.debug("Removing unnecessary lock aquirement on "+output.getDatabase()+" database");
+        //}
       } else if (output.getTyp() == WriteEntity.Type.TABLE) {
         lockObj = getLockObjects(plan, null, output.getTable(), null,
             output.isComplete() ? HiveLockMode.EXCLUSIVE : HiveLockMode.SHARED);
