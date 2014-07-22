@@ -380,7 +380,8 @@ public class SessionState {
 
       authorizer = HiveUtils.getAuthorizeProviderManager(conf,
           HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER, authenticator, true);
-
+      //fix owner can not drop table bug
+	  createTableGrants = CreateTableAutomaticGrant.create(conf);
       if (authorizer == null) {
         // if it was null, the new authorization plugin must be specified in
         // config

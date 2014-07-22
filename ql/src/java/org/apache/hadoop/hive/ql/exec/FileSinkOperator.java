@@ -68,13 +68,16 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import com.google.common.collect.Lists;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 
 /**
  * File Sink operator implementation.
  **/
 public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
     Serializable {
-
+  public static Log LOG = LogFactory.getLog("FileSinkOperator.class");
   protected transient HashMap<String, FSPaths> valToPaths;
   protected transient int numDynParts;
   protected transient List<String> dpColNames;
@@ -214,6 +217,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   protected transient FileSystem fs;
   protected transient Serializer serializer;
   protected transient LongWritable row_count;
+  protected transient TableIdEnum tabIdEnum = null;
   private transient boolean isNativeTable = true;
 
   /**
@@ -241,6 +245,23 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   protected transient JobConf jc;
   Class<? extends Writable> outputClass;
   String taskId;
+  public static enum TableIdEnum {
+	TABLE_ID_1_ROWCOUNT,
+	TABLE_ID_2_ROWCOUNT,
+	TABLE_ID_3_ROWCOUNT,
+	TABLE_ID_4_ROWCOUNT,
+	TABLE_ID_5_ROWCOUNT,
+	TABLE_ID_6_ROWCOUNT,
+	TABLE_ID_7_ROWCOUNT,
+	TABLE_ID_8_ROWCOUNT,
+	TABLE_ID_9_ROWCOUNT,
+	TABLE_ID_10_ROWCOUNT,
+	TABLE_ID_11_ROWCOUNT,
+	TABLE_ID_12_ROWCOUNT,
+	TABLE_ID_13_ROWCOUNT,
+	TABLE_ID_14_ROWCOUNT,
+	TABLE_ID_15_ROWCOUNT;
+  }
 
   protected boolean filesCreated = false;
 
@@ -317,7 +338,15 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
         prtner = (HivePartitioner<HiveKey, Object>) ReflectionUtils.newInstance(
             jc.getPartitionerClass(), null);
       }
-      row_count = new LongWritable();
+      //row_count = new LongWritable();
+	  int id = conf.getDestTableId();
+	  if ((id != 0) && (id <= TableIdEnum.values().length)) {
+	  	String enumName = "TABLE_ID_" + String.valueOf(id) + "_ROWCOUNT";   
+	  	tabIdEnum = TableIdEnum.valueOf(enumName);
+	  	row_count = new LongWritable();
+	  	statsMap.put(tabIdEnum, row_count);
+	  } 
+
       if (dpCtx != null) {
         dpSetup();
       }
