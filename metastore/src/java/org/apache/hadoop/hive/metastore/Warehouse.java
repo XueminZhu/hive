@@ -263,7 +263,17 @@ public class Warehouse {
     }
     String user = ShimLoader.getHadoopShims().getShortUserName(ugi);
     //check whether owner can delete
-    if (stat.getOwner().equals(user) &&
+	
+	//fix hdfs drop partition bug
+	LOG.warn("in Warehouse user is " + user);
+	String adminStr = HiveConf.getVar(conf,HiveConf.ConfVars.USERS_IN_ADMIN_ROLE,"hdfs").trim();
+	LOG.warn("adminStr is " + adminStr);
+	if (user.equals(adminStr)){
+		return true;
+	}
+	
+	
+	if (stat.getOwner().equals(user) &&
         stat.getPermission().getUserAction().implies(FsAction.WRITE)) {
       return true;
     }
