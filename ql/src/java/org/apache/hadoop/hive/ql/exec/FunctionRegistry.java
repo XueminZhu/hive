@@ -175,6 +175,15 @@ public final class FunctionRegistry {
   static Map<String, WindowFunctionInfo> windowFunctions = Collections.synchronizedMap(new LinkedHashMap<String, WindowFunctionInfo>());
 
   static {
+
+
+    try {
+      Class<?> pluginClass = Class.forName("com.vipshop.curiosity.vipudf.AddDaysUDF");
+      URL jarLocation = pluginClass.getProtectionDomain().getCodeSource().getLocation();
+      FunctionRegistry.registerFunctionsFromPluginJarScottZhai(jarLocation,pluginClass.getClassLoader());
+} catch( Exception e ) {
+      e.printStackTrace();
+}
     registerGenericUDF("concat", GenericUDFConcat.class);
     registerUDF("substr", UDFSubstr.class, false);
     registerUDF("substring", UDFSubstr.class, false);
@@ -444,6 +453,75 @@ public final class FunctionRegistry {
     registerTableFunction(WINDOWING_TABLE_FUNCTION,  WindowingTableFunctionResolver.class);
     registerTableFunction("matchpath", MatchPathResolver.class);
   }
+
+
+  public static void registerFunctionsFromPluginJarScottZhai(
+                URL jarLocation,
+                    ClassLoader classLoader) throws Exception {
+  
+            URL url = new URL("jar:" + jarLocation + "!/META-INF/class-info.xml");
+                InputStream inputStream = null;
+                    try {
+                              inputStream = url.openStream();
+                                    DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                                          DocumentBuilder docBuilder = dbf.newDocumentBuilder();
+                                                Document doc = docBuilder.parse(inputStream);
+                                                      Element root = doc.getDocumentElement();
+                                                            if (!root.getTagName().equals("ClassList")) {
+                                                                        return;
+                                                                              }
+                                                                  NodeList children = root.getElementsByTagName("Class");
+                                                                        for (int i = 0; i < children.getLength(); ++i) {
+                                                                                    Element child = (Element) children.item(i);
+                                                                                            String javaName = child.getAttribute("javaname");
+                                                                                                    String sqlName = child.getAttribute("sqlname");
+  //  Class<?> udfClass = Class.forName(javaName, true, classLoader);
+  Class<?> udfClass = Class.forName(javaName);
+                                                                                                                    boolean registered = registerTemporaryFunctionScottZhai(sqlName, udfClass);
+                                                                                                                            if (!registered) {
+                                                                                                                                          throw new RuntimeException(
+                                                                                                                                                              "Class " + udfClass + " is not a Hive function implementation");
+                                                                                                                                                  }
+                                                                                                                                  }
+                                                                            } finally {
+                                                                                      IOUtils.closeStream(inputStream);
+                                                                                          }
+                     }
+     public static boolean registerTemporaryFunctionScottZhai(
+                 String functionName, Class<?> udfClass) {
+  
+             UDFClassType udfClassType = FunctionUtils.getUDFClassType(udfClass);
+                 switch (udfClassType) {
+                         case UDF:
+                                    registerUDF(true, functionName, (Class<? extends UDF>)udfClass, false);
+                                          break;
+                                              case UDAF:
+                                                 registerUDAF(functionName, (Class<? extends UDAF>)udfClass);
+                                                       break;
+                                                         case GENERIC_UDF:
+                                                            /* FunctionRegistry.registerTemporaryGenericUDF(
+                                                             *         functionName, (Class<? extends GenericUDF>) udfClass);*/
+                                                             registerGenericUDF(true, functionName, (Class<? extends GenericUDF>) udfClass);
+                                                                   break;
+                                                                       case GENERIC_UDTF:
+                                                                        /* FunctionRegistry.registerTemporaryGenericUDTF(
+                                                                         *         functionName, (Class<? extends GenericUDTF>) udfClass);*/
+                                                                         registerGenericUDTF(true, functionName, (Class<? extends GenericUDTF>) udfClass);
+                                                                              break;
+                                                                                   case GENERIC_UDAF_RESOLVER:
+                                                                                    /* FunctionRegistry.registerTemporaryGenericUDAF(
+                                                                                     *         functionName, (GenericUDAFResolver)
+                                                                                     *                 ReflectionUtils.newInstance(udfClass, null));*/
+                                                                                    registerGenericUDAF(true, functionName, (GenericUDAFResolver)
+                                                                                                          ReflectionUtils.newInstance(udfClass, null));
+                                                                                           break;
+                                                                                               default:
+                                                                                                 return false;
+                                                                                                     }
+                    return true;
+  
+                       }
+
 
   public static void registerTemporaryUDF(String functionName,
       Class<? extends UDF> UDFClass, boolean isOperator) {
