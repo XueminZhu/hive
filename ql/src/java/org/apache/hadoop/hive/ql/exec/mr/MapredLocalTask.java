@@ -349,14 +349,18 @@ public class MapredLocalTask extends Task<MapredLocalWork> implements Serializab
         setUpFetchOpContext(fetchOp, alias, bigTableBucket);
       }
 
+	  // get the root operator
+	  Operator<? extends OperatorDesc> forwardOp = work.getAliasToWork().get(alias);
+
       if (fetchOp.isEmptyTable()) {
         //generate empty hashtable for empty table
         this.generateDummyHashTable(alias, bigTableBucket);
+		forwardOp.close(false);
         continue;
       }
 
       // get the root operator
-      Operator<? extends OperatorDesc> forwardOp = work.getAliasToWork().get(alias);
+      //Operator<? extends OperatorDesc> forwardOp = work.getAliasToWork().get(alias);
       // walk through the operator tree
       while (!forwardOp.getDone()) {
         InspectableObject row = fetchOp.getNextRow();
