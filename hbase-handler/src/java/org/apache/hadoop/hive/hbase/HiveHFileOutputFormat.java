@@ -19,10 +19,15 @@
 package org.apache.hadoop.hive.hbase;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.HashMap;
 
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.logging.Log;
@@ -45,6 +50,13 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Progressable;
 
+import java.io.FileWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+
 /**
  * HiveHFileOutputFormat implements HiveOutputFormat for HFile bulk
  * loading.  Until HBASE-1861 is implemented, it can only be used
@@ -55,6 +67,11 @@ public class HiveHFileOutputFormat extends
     HiveOutputFormat<ImmutableBytesWritable, KeyValue> {
 
   private static final String HFILE_FAMILY_PATH = "hfile.family.path";
+   private static final String HIVE_DB_NAME = "hive.db.name";
+   private static final String HIVE_TABLE_NAME = "hive.table.name";
+ private static final String HIVE_MYSQL_URL = "hive.mysql.url";
+ private static final String HIVE_MYSQL_USER = "hive.mysql.user";
+ private static final String HIVE_MYSQL_PASS = "hive.mysql.pass";
 
   static final Log LOG = LogFactory.getLog(
     HiveHFileOutputFormat.class.getName());
@@ -69,6 +86,42 @@ public class HiveHFileOutputFormat extends
       throw new IOException(ex);
     }
   }
+  
+  public static void getColumnTypes(String dbName,String tableName,Map<String,String> columnTypes,String mysqlurl,String username,String password){
+
+	      String user = username;
+	  	  //String password = password;
+	  	  String url = mysqlurl;
+	  	  String driver = "com.mysql.jdbc.Driver";
+	  	  String sqlstr;
+	  	  Connection con = null;
+	  	  Statement stmt = null;
+	  	  ResultSet rs = null;
+	  	  try {
+	  		  Class.forName(driver);
+	  		  con = DriverManager.getConnection(url, user, password);
+	  		  stmt = con.createStatement();
+	  		  sqlstr = " select t1.tbl_name,t2.COLUMN_NAME,t2.TYPE_NAME from tbls t1,columns_v2 t2 ,sds t3,dbs t4 where t1.sd_id=t3.sd_id and t2.cd_id=t3.cd_id and t4.db_id=t1.db_id and t1.tbl_name='"+tableName+"' and t4.name='"+dbName+"';";
+	  		  rs = stmt.executeQuery(sqlstr);
+	  		  while(rs.next()){
+	  			  String columnName = rs.getString( 2 );
+	  			  String columnType = rs.getString( 3 );
+				  LOG.info(" columnName is->>"+columnName+"    columnType is --->>" + columnType);
+	  			  columnTypes.put( columnName, columnType );
+	  		  }
+	  		  
+	  	  } catch( Exception e ) {
+	  	     e.printStackTrace();     
+	  	  }finally{
+			try {
+				rs.close();
+				stmt.close();
+				con.close();
+			} catch( Exception e5 ) {
+				e5.printStackTrace();
+			}
+		  }
+	    }
 
   @Override
   public RecordWriter getHiveRecordWriter(
@@ -78,6 +131,8 @@ public class HiveHFileOutputFormat extends
     boolean isCompressed,
     Properties tableProperties,
     final Progressable progressable) throws IOException {
+   
+
 
     // Read configuration for the target path
     String hfilePath = tableProperties.getProperty(HFILE_FAMILY_PATH);
@@ -85,6 +140,39 @@ public class HiveHFileOutputFormat extends
       throw new RuntimeException(
         "Please set " + HFILE_FAMILY_PATH + " to target location for HFiles");
     }
+
+
+	String dbName = tableProperties.getProperty(HIVE_DB_NAME);
+    if (dbName == null) {
+	    throw new RuntimeException( "Please set " + HIVE_DB_NAME + " to get table columns type ");
+	}
+    LOG.info("dbName is ------------------>>"+dbName);
+    
+    String tableName = tableProperties.getProperty(HIVE_TABLE_NAME);
+    if (tableName == null) {
+	   throw new RuntimeException( "Please set " + HIVE_TABLE_NAME + " to get table columns type ");
+	}
+	LOG.info("tableName is ------------------>>"+tableName);
+  
+    String mysqlurl = jc.get( "javax.jdo.option.ConnectionURL" );
+	if (mysqlurl == null) {
+		mysqlurl = tableProperties.getProperty(HIVE_MYSQL_URL); jc.get( "javax.jdo.option.ConnectionURL" );
+		if(mysqlurl == null){
+		   throw new RuntimeException( "Please set " + HIVE_MYSQL_URL + " to get table columns type ");
+        }
+	}
+    String username = jc.get( "javax.jdo.option.ConnectionUserName" );
+	if (username == null) {
+		username = tableProperties.getProperty(HIVE_MYSQL_USER);
+		if(username == null){
+		    throw new RuntimeException( "Please set " + HIVE_MYSQL_PASS + " to get table columns type ");
+	    }
+	}
+    String password = tableProperties.getProperty(HIVE_MYSQL_PASS);
+	if (password == null) {
+		throw new RuntimeException( "Please set " + HIVE_MYSQL_PASS + " to get table columns type ");
+    }
+
 
     // Target path's last component is also the column family name.
     final Path columnFamilyPath = new Path(hfilePath);
@@ -119,7 +207,11 @@ public class HiveHFileOutputFormat extends
       }
       ++i;
     }
-
+    
+    final Map<String,String> columnTypes = new HashMap<String,String>();
+    getColumnTypes(dbName,tableName,columnTypes,mysqlurl,username,password);
+	LOG.info( "++++++++++++++++++++++++++++++++++++++++++++++++++++++"+columnTypes );
+	
     return new RecordWriter() {
 
       @Override
@@ -188,13 +280,53 @@ public class HiveHFileOutputFormat extends
               continue;
             }
           }
+          
+          
           byte [] valBytes = Bytes.toBytes(val);
+                   
+                    if(columnTypes.containsKey( Bytes.toString(columnNameBytes) )){
+                  	  String type = columnTypes.get( Bytes.toString(columnNameBytes) );
+                  	  if("bigint".equalsIgnoreCase( type )){
+                  		  try {
+          					long temp = Long.parseLong( val );
+          					  valBytes = Bytes.toBytes(temp);
+          				} catch( NumberFormatException e ) {
+          					e.printStackTrace();
+          				}
+                  	  }
+                  	  if("int".equalsIgnoreCase( type )){
+                  		  try {
+            					int  temp = Integer.parseInt( val );
+            					  valBytes = Bytes.toBytes(temp);
+            				} catch( NumberFormatException e ) {
+            					e.printStackTrace();
+            				}
+                  	  }
+                  	  if("double".equalsIgnoreCase( type )){
+                  		  try {
+                  			  double  temp = Double.parseDouble( val );
+                  			  valBytes = Bytes.toBytes(temp);
+                  		  } catch( NumberFormatException e ) {
+                  			  e.printStackTrace();
+                  		  }
+                  	  }
+					  if("float".equalsIgnoreCase( type )){
+	                      try {
+							   float  temp = Float.parseFloat( val );
+							   valBytes = Bytes.toBytes(temp);
+	             		  } catch( NumberFormatException e ) {
+							   e.printStackTrace();
+		           		  }
+				  	  }
+                  	  
+                    }
           KeyValue kv = new KeyValue(
             rowKeyBytes,
             columnFamilyNameBytes,
             columnNameBytes,
             valBytes);
           try {
+
             fileWriter.write(null, kv);
           } catch (InterruptedException ex) {
             throw new IOException(ex);
